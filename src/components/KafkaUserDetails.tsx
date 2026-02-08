@@ -21,28 +21,24 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
 import { Icon } from '@iconify/react';
 
 import { KafkaUserClass } from '../crdClasses';
+import { mockKafkaUsers, getDataWithMock } from '../mockData';
 
 export default function KafkaUserDetails() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
   
-  // Use the hook pattern with a filter
   const [users, error] = KafkaUserClass.useList({ namespace });
+  const displayData = getDataWithMock(users, mockKafkaUsers as any[], error);
   
-  // Find the specific user by name using jsonData
-  const user = users?.find((u: any) => u.jsonData?.metadata?.name === name);
+  const user = displayData?.find((u: any) => {
+    const data = u.jsonData || u;
+    return data.metadata?.name === name;
+  });
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka User Details">
-        <Typography color="error">Error loading Kafka user: {(error as any)?.message || 'Unknown error'}</Typography>
-      </SectionBox>
-    );
-  }
-
-  if (users === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka User Details">
         <Typography>Loading...</Typography>
@@ -53,13 +49,12 @@ export default function KafkaUserDetails() {
   if (!user) {
     return (
       <SectionBox title="Kafka User Details">
-        <Typography color="error">Kafka user '{name}' not found in namespace '{namespace}'</Typography>
+        <Typography color="error">Kafka User '{name}' not found in namespace '{namespace}'</Typography>
       </SectionBox>
     );
   }
 
-  // Access data via jsonData
-  const data = user.jsonData || {};
+  const data = user.jsonData || user;
   const spec = data.spec || {};
   const status = data.status || {};
   const metadata = data.metadata || {};
@@ -75,41 +70,49 @@ export default function KafkaUserDetails() {
     return <StatusLabel status="warning">Unknown</StatusLabel>;
   };
 
-  // Parse ACLs
-  const acls = spec.authorization?.acls || [];
-
-  // Parse quotas
-  const quotaEntries = Object.entries(spec.quotas || {}).map(([key, value]) => ({
-    quota: key,
-    value: String(value),
-  }));
-
   return (
     <Box sx={{ p: 2 }}>
       {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <Icon icon="mdi:account-key" width={40} height={40} color="#ea4335" />
-        <Box ml={2}>
-          <Typography variant="h5" fontWeight="bold">
-            {metadata.name}
-          </Typography>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Chip label={metadata.namespace} size="small" variant="outlined" />
-            {getReadyStatus()}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 3, 
+          background: 'linear-gradient(135deg, #ea433515 0%, #ea433505 100%)',
+          border: '1px solid #ea433530'
+        }}
+      >
+        <Box display="flex" alignItems="center">
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#ea433520', mr: 2 }}>
+            <Icon icon="mdi:account-key" width={40} height={40} color="#ea4335" />
+          </Box>
+          <Box flex={1}>
+            <Typography variant="h4" fontWeight="bold">
+              {metadata.name}
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+              <Chip label={metadata.namespace} size="small" variant="outlined" />
+              <Chip label={spec.authentication?.type || 'No Auth'} size="small" color="primary" />
+              {spec.authorization?.type && (
+                <Chip label={spec.authorization.type} size="small" color="secondary" variant="outlined" />
+              )}
+              {getReadyStatus()}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </Paper>
 
       <Grid container spacing={3}>
-        {/* Basic Info */}
+        {/* User Info */}
         <Grid item xs={12} md={6}>
           <SectionBox title="User Information">
             <NameValueTable
               rows={[
-                { name: 'Resource Name', value: metadata.name },
+                { name: 'Name', value: metadata.name },
                 { name: 'Namespace', value: metadata.namespace },
                 { name: 'Username', value: status.username || metadata.name },
-                { name: 'Secret Name', value: status.secret || 'N/A' },
+                { name: 'Secret', value: status.secret || 'N/A' },
                 { name: 'Created', value: metadata.creationTimestamp },
               ]}
             />
@@ -121,66 +124,37 @@ export default function KafkaUserDetails() {
           <SectionBox title="Authentication">
             <NameValueTable
               rows={[
-                {
-                  name: 'Type',
-                  value: spec.authentication?.type || 'None',
-                },
-                {
-                  name: 'Authorization Type',
-                  value: spec.authorization?.type || 'None',
-                },
+                { name: 'Type', value: (
+                  <Chip label={spec.authentication?.type || 'None'} size="small" color="primary" />
+                )},
               ]}
             />
           </SectionBox>
         </Grid>
 
-        {/* ACLs */}
-        <Grid item xs={12}>
-          <SectionBox title="Access Control Lists (ACLs)">
-            {acls.length > 0 ? (
-              <SimpleTable
-                columns={[
-                  {
-                    label: 'Resource Type',
-                    getter: (acl: any) => acl.resource?.type || 'Unknown',
-                  },
-                  {
-                    label: 'Resource Name',
-                    getter: (acl: any) => acl.resource?.name || '*',
-                  },
-                  {
-                    label: 'Pattern Type',
-                    getter: (acl: any) => acl.resource?.patternType || 'literal',
-                  },
-                  {
-                    label: 'Operations',
-                    getter: (acl: any) => (acl.operations || []).join(', '),
-                  },
-                  {
-                    label: 'Host',
-                    getter: (acl: any) => acl.host || '*',
-                  },
-                ]}
-                data={acls}
-              />
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No ACLs configured. User has no access restrictions.
-              </Typography>
-            )}
+        {/* Authorization */}
+        <Grid item xs={12} md={6}>
+          <SectionBox title="Authorization">
+            <NameValueTable
+              rows={[
+                { name: 'Type', value: (
+                  <Chip label={spec.authorization?.type || 'None'} size="small" color="secondary" />
+                )},
+              ]}
+            />
           </SectionBox>
         </Grid>
 
         {/* Quotas */}
         <Grid item xs={12} md={6}>
           <SectionBox title="Quotas">
-            {quotaEntries.length > 0 ? (
-              <SimpleTable
-                columns={[
-                  { label: 'Quota', getter: (q: any) => q.quota },
-                  { label: 'Value', getter: (q: any) => q.value },
+            {spec.quotas ? (
+              <NameValueTable
+                rows={[
+                  { name: 'Producer Byte Rate', value: spec.quotas.producerByteRate ? `${(spec.quotas.producerByteRate / 1024 / 1024).toFixed(1)} MB/s` : 'Unlimited' },
+                  { name: 'Consumer Byte Rate', value: spec.quotas.consumerByteRate ? `${(spec.quotas.consumerByteRate / 1024 / 1024).toFixed(1)} MB/s` : 'Unlimited' },
+                  { name: 'Request Percentage', value: spec.quotas.requestPercentage ? `${spec.quotas.requestPercentage}%` : 'Unlimited' },
                 ]}
-                data={quotaEntries}
               />
             ) : (
               <Typography variant="body2" color="text.secondary">
@@ -190,8 +164,39 @@ export default function KafkaUserDetails() {
           </SectionBox>
         </Grid>
 
+        {/* ACLs */}
+        <Grid item xs={12}>
+          <SectionBox title="Access Control Lists (ACLs)">
+            {spec.authorization?.acls && spec.authorization.acls.length > 0 ? (
+              <SimpleTable
+                columns={[
+                  { label: 'Resource Type', getter: (acl: any) => (
+                    <Chip label={acl.resource?.type} size="small" color="primary" variant="outlined" />
+                  )},
+                  { label: 'Resource Name', getter: (acl: any) => (
+                    <Typography sx={{ fontFamily: 'monospace' }}>{acl.resource?.name}</Typography>
+                  )},
+                  { label: 'Pattern', getter: (acl: any) => acl.resource?.patternType || 'literal' },
+                  { label: 'Operations', getter: (acl: any) => (
+                    <Box display="flex" gap={0.5} flexWrap="wrap">
+                      {(acl.operations || []).map((op: string) => (
+                        <Chip key={op} label={op} size="small" variant="outlined" />
+                      ))}
+                    </Box>
+                  )},
+                ]}
+                data={spec.authorization.acls}
+              />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No ACLs configured
+              </Typography>
+            )}
+          </SectionBox>
+        </Grid>
+
         {/* Conditions */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12}>
           <SectionBox title="Conditions">
             {status.conditions && status.conditions.length > 0 ? (
               <SimpleTable
@@ -206,6 +211,7 @@ export default function KafkaUserDetails() {
                     ),
                   },
                   { label: 'Reason', getter: (c: any) => c.reason || '-' },
+                  { label: 'Message', getter: (c: any) => c.message || '-' },
                 ]}
                 data={status.conditions}
               />

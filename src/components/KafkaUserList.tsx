@@ -20,12 +20,16 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import { Link as RouterLink } from 'react-router-dom';
+import { Icon } from '@iconify/react';
 
 import { KafkaUserClass } from '../crdClasses';
+import { mockKafkaUsers, getDataWithMock } from '../mockData';
 
 function getUserStatus(user: any): { status: string; type: 'success' | 'warning' | 'error' } {
-  const conditions = user.status?.conditions || [];
+  const data = user.jsonData || user;
+  const conditions = data.status?.conditions || [];
   const readyCondition = conditions.find((c: any) => c.type === 'Ready');
   
   if (readyCondition?.status === 'True') {
@@ -37,29 +41,22 @@ function getUserStatus(user: any): { status: string; type: 'success' | 'warning'
 }
 
 function getAuthType(user: any): string {
-  return user.spec?.authentication?.type || 'None';
+  const data = user.jsonData || user;
+  return data.spec?.authentication?.type || 'None';
 }
 
 function getAuthzType(user: any): string {
-  return user.spec?.authorization?.type || 'None';
+  const data = user.jsonData || user;
+  return data.spec?.authorization?.type || 'None';
 }
 
 export default function KafkaUserList() {
-  // Use the hook pattern
   const [users, error] = KafkaUserClass.useList();
+  
+  const displayData = getDataWithMock(users, mockKafkaUsers as any[], error);
+  const isDemoMode = error !== null || (users !== null && users.length === 0);
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Users">
-        <Typography color="error">Error loading Kafka users: {error.message || 'Unknown error'}</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          Make sure Strimzi CRDs are installed in your cluster.
-        </Typography>
-      </SectionBox>
-    );
-  }
-
-  if (users === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Users">
         <Typography>Loading Kafka users...</Typography>
@@ -68,57 +65,99 @@ export default function KafkaUserList() {
   }
 
   return (
-    <SectionBox title="Kafka Users">
-      <Box mb={2}>
-        <Typography variant="body2" color="text.secondary">
-          Manage Kafka users and their authentication/authorization settings.
-        </Typography>
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" mb={3}>
+        <Box sx={{ p: 1, borderRadius: 2, bgcolor: '#ea433515', mr: 2 }}>
+          <Icon icon="mdi:account-group" width={32} height={32} color="#ea4335" />
+        </Box>
+        <Box flex={1}>
+          <Typography variant="h5" fontWeight="bold">Kafka Users</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage authentication and authorization for Kafka clients
+          </Typography>
+        </Box>
+        {isDemoMode && (
+          <Chip label="DEMO MODE" size="small" color="warning" sx={{ fontWeight: 600 }} />
+        )}
       </Box>
 
-      <SimpleTable
-        columns={[
-          {
-            label: 'Name',
-            getter: (user: any) => (
-              <Link
-                component={RouterLink}
-                to={`/strimzi/users/${user.metadata?.namespace}/${user.metadata?.name}`}
-              >
-                {user.metadata?.name}
-              </Link>
-            ),
-          },
-          {
-            label: 'Namespace',
-            getter: (user: any) => user.metadata?.namespace,
-          },
-          {
-            label: 'Username',
-            getter: (user: any) => user.status?.username || user.metadata?.name,
-          },
-          {
-            label: 'Authentication',
-            getter: (user: any) => (
-              <Chip label={getAuthType(user)} size="small" color="info" variant="outlined" />
-            ),
-          },
-          {
-            label: 'Authorization',
-            getter: (user: any) => (
-              <Chip label={getAuthzType(user)} size="small" color="secondary" variant="outlined" />
-            ),
-          },
-          {
-            label: 'Status',
-            getter: (user: any) => {
-              const { status, type } = getUserStatus(user);
-              return <StatusLabel status={type}>{status}</StatusLabel>;
+      {isDemoMode && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Showing demo data. Connect to a cluster with Strimzi installed to see real resources.
+        </Alert>
+      )}
+
+      <SectionBox>
+        <SimpleTable
+          columns={[
+            {
+              label: 'Name',
+              getter: (user: any) => {
+                const data = user.jsonData || user;
+                return (
+                  <Link
+                    component={RouterLink}
+                    to={`/strimzi/users/${data.metadata?.namespace}/${data.metadata?.name}`}
+                    sx={{ fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' }}}
+                  >
+                    {data.metadata?.name}
+                  </Link>
+                );
+              },
             },
-          },
-        ]}
-        data={users}
-        emptyMessage="No Kafka users found. Create a KafkaUser resource to get started."
-      />
-    </SectionBox>
+            {
+              label: 'Namespace',
+              getter: (user: any) => {
+                const data = user.jsonData || user;
+                return <Chip label={data.metadata?.namespace} size="small" variant="outlined" />;
+              },
+            },
+            {
+              label: 'Username',
+              getter: (user: any) => {
+                const data = user.jsonData || user;
+                return (
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    {data.status?.username || data.metadata?.name}
+                  </Typography>
+                );
+              },
+            },
+            {
+              label: 'Authentication',
+              getter: (user: any) => (
+                <Chip 
+                  label={getAuthType(user)} 
+                  size="small" 
+                  color="primary"
+                  variant="outlined"
+                />
+              ),
+            },
+            {
+              label: 'Authorization',
+              getter: (user: any) => (
+                <Chip 
+                  label={getAuthzType(user)} 
+                  size="small" 
+                  color="secondary"
+                  variant="outlined"
+                />
+              ),
+            },
+            {
+              label: 'Status',
+              getter: (user: any) => {
+                const { status, type } = getUserStatus(user);
+                return <StatusLabel status={type}>{status}</StatusLabel>;
+              },
+            },
+          ]}
+          data={displayData}
+          emptyMessage="No Kafka users found."
+        />
+      </SectionBox>
+    </Box>
   );
 }

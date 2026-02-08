@@ -19,12 +19,17 @@ import { SectionBox, SimpleTable, StatusLabel } from '@kinvolk/headlamp-plugin/l
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
+import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import { Link as RouterLink } from 'react-router-dom';
+import { Icon } from '@iconify/react';
 
 import { KafkaClass } from '../crdClasses';
+import { mockKafkaClusters, getDataWithMock } from '../mockData';
 
 function getKafkaStatus(kafka: any): { status: string; type: 'success' | 'warning' | 'error' } {
-  const conditions = kafka.status?.conditions || [];
+  const data = kafka.jsonData || kafka;
+  const conditions = data.status?.conditions || [];
   const readyCondition = conditions.find((c: any) => c.type === 'Ready');
   
   if (readyCondition?.status === 'True') {
@@ -36,34 +41,29 @@ function getKafkaStatus(kafka: any): { status: string; type: 'success' | 'warnin
 }
 
 function getBrokerCount(kafka: any): number {
-  return kafka.spec?.kafka?.replicas || 0;
+  const data = kafka.jsonData || kafka;
+  return data.spec?.kafka?.replicas || 0;
 }
 
 function getKafkaVersion(kafka: any): string {
-  return kafka.status?.kafkaVersion || kafka.spec?.kafka?.version || 'Unknown';
+  const data = kafka.jsonData || kafka;
+  return data.status?.kafkaVersion || data.spec?.kafka?.version || 'Unknown';
 }
 
 function getListeners(kafka: any): string {
-  const listeners = kafka.spec?.kafka?.listeners || [];
+  const data = kafka.jsonData || kafka;
+  const listeners = data.spec?.kafka?.listeners || [];
   return listeners.map((l: any) => l.name).join(', ') || 'None';
 }
 
 export default function KafkaList() {
-  // Use the hook pattern
   const [kafkas, error] = KafkaClass.useList();
+  
+  // Use mock data if no real data
+  const displayData = getDataWithMock(kafkas, mockKafkaClusters as any[], error);
+  const isDemoMode = error !== null || (kafkas !== null && kafkas.length === 0);
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Clusters">
-        <Typography color="error">Error loading Kafka clusters: {error.message || 'Unknown error'}</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          Make sure Strimzi CRDs are installed in your cluster.
-        </Typography>
-      </SectionBox>
-    );
-  }
-
-  if (kafkas === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Clusters">
         <Typography>Loading Kafka clusters...</Typography>
@@ -72,53 +72,89 @@ export default function KafkaList() {
   }
 
   return (
-    <SectionBox title="Kafka Clusters">
-      <Box mb={2}>
-        <Typography variant="body2" color="text.secondary">
-          Manage your Apache Kafka clusters deployed via Strimzi operator.
-        </Typography>
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" mb={3}>
+        <Box sx={{ p: 1, borderRadius: 2, bgcolor: '#1a73e815', mr: 2 }}>
+          <Icon icon="mdi:server-network" width={32} height={32} color="#1a73e8" />
+        </Box>
+        <Box flex={1}>
+          <Typography variant="h5" fontWeight="bold">Kafka Clusters</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage your Apache Kafka clusters deployed via Strimzi operator
+          </Typography>
+        </Box>
+        {isDemoMode && (
+          <Chip label="DEMO MODE" size="small" color="warning" sx={{ fontWeight: 600 }} />
+        )}
       </Box>
 
-      <SimpleTable
-        columns={[
-          {
-            label: 'Name',
-            getter: (kafka: any) => (
-              <Link
-                component={RouterLink}
-                to={`/strimzi/kafkas/${kafka.metadata?.namespace}/${kafka.metadata?.name}`}
-              >
-                {kafka.metadata?.name}
-              </Link>
-            ),
-          },
-          {
-            label: 'Namespace',
-            getter: (kafka: any) => kafka.metadata?.namespace,
-          },
-          {
-            label: 'Brokers',
-            getter: (kafka: any) => getBrokerCount(kafka),
-          },
-          {
-            label: 'Version',
-            getter: (kafka: any) => getKafkaVersion(kafka),
-          },
-          {
-            label: 'Listeners',
-            getter: (kafka: any) => getListeners(kafka),
-          },
-          {
-            label: 'Status',
-            getter: (kafka: any) => {
-              const { status, type } = getKafkaStatus(kafka);
-              return <StatusLabel status={type}>{status}</StatusLabel>;
+      {isDemoMode && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Showing demo data. Connect to a cluster with Strimzi installed to see real resources.
+        </Alert>
+      )}
+
+      <SectionBox>
+        <SimpleTable
+          columns={[
+            {
+              label: 'Name',
+              getter: (kafka: any) => {
+                const data = kafka.jsonData || kafka;
+                return (
+                  <Link
+                    component={RouterLink}
+                    to={`/strimzi/kafkas/${data.metadata?.namespace}/${data.metadata?.name}`}
+                    sx={{ fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' }}}
+                  >
+                    {data.metadata?.name}
+                  </Link>
+                );
+              },
             },
-          },
-        ]}
-        data={kafkas}
-        emptyMessage="No Kafka clusters found. Deploy a Kafka cluster using Strimzi to get started."
-      />
-    </SectionBox>
+            {
+              label: 'Namespace',
+              getter: (kafka: any) => {
+                const data = kafka.jsonData || kafka;
+                return <Chip label={data.metadata?.namespace} size="small" variant="outlined" />;
+              },
+            },
+            {
+              label: 'Brokers',
+              getter: (kafka: any) => (
+                <Chip 
+                  label={getBrokerCount(kafka)} 
+                  size="small" 
+                  color="primary" 
+                  sx={{ minWidth: 32, fontWeight: 600 }}
+                />
+              ),
+            },
+            {
+              label: 'Version',
+              getter: (kafka: any) => (
+                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                  {getKafkaVersion(kafka)}
+                </Typography>
+              ),
+            },
+            {
+              label: 'Listeners',
+              getter: (kafka: any) => getListeners(kafka),
+            },
+            {
+              label: 'Status',
+              getter: (kafka: any) => {
+                const { status, type } = getKafkaStatus(kafka);
+                return <StatusLabel status={type}>{status}</StatusLabel>;
+              },
+            },
+          ]}
+          data={displayData}
+          emptyMessage="No Kafka clusters found."
+        />
+      </SectionBox>
+    </Box>
   );
 }

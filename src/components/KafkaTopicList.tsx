@@ -20,12 +20,16 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import { Link as RouterLink } from 'react-router-dom';
+import { Icon } from '@iconify/react';
 
 import { KafkaTopicClass } from '../crdClasses';
+import { mockKafkaTopics, getDataWithMock } from '../mockData';
 
 function getTopicStatus(topic: any): { status: string; type: 'success' | 'warning' | 'error' } {
-  const conditions = topic.status?.conditions || [];
+  const data = topic.jsonData || topic;
+  const conditions = data.status?.conditions || [];
   const readyCondition = conditions.find((c: any) => c.type === 'Ready');
   
   if (readyCondition?.status === 'True') {
@@ -37,21 +41,12 @@ function getTopicStatus(topic: any): { status: string; type: 'success' | 'warnin
 }
 
 export default function KafkaTopicList() {
-  // Use the hook pattern
   const [topics, error] = KafkaTopicClass.useList();
+  
+  const displayData = getDataWithMock(topics, mockKafkaTopics as any[], error);
+  const isDemoMode = error !== null || (topics !== null && topics.length === 0);
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Topics">
-        <Typography color="error">Error loading Kafka topics: {error.message || 'Unknown error'}</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          Make sure Strimzi CRDs are installed in your cluster.
-        </Typography>
-      </SectionBox>
-    );
-  }
-
-  if (topics === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Topics">
         <Typography>Loading Kafka topics...</Typography>
@@ -60,68 +55,106 @@ export default function KafkaTopicList() {
   }
 
   return (
-    <SectionBox title="Kafka Topics">
-      <Box mb={2}>
-        <Typography variant="body2" color="text.secondary">
-          Manage Kafka topics in your Strimzi-managed clusters.
-        </Typography>
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" mb={3}>
+        <Box sx={{ p: 1, borderRadius: 2, bgcolor: '#34a85315', mr: 2 }}>
+          <Icon icon="mdi:message-text" width={32} height={32} color="#34a853" />
+        </Box>
+        <Box flex={1}>
+          <Typography variant="h5" fontWeight="bold">Kafka Topics</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage topics for storing and organizing your event streams
+          </Typography>
+        </Box>
+        {isDemoMode && (
+          <Chip label="DEMO MODE" size="small" color="warning" sx={{ fontWeight: 600 }} />
+        )}
       </Box>
 
-      <SimpleTable
-        columns={[
-          {
-            label: 'Name',
-            getter: (topic: any) => (
-              <Link
-                component={RouterLink}
-                to={`/strimzi/topics/${topic.metadata?.namespace}/${topic.metadata?.name}`}
-              >
-                {topic.metadata?.name}
-              </Link>
-            ),
-          },
-          {
-            label: 'Namespace',
-            getter: (topic: any) => topic.metadata?.namespace,
-          },
-          {
-            label: 'Partitions',
-            getter: (topic: any) => (
-              <Chip
-                label={topic.spec?.partitions || 0}
-                size="small"
-                color="primary"
-                variant="outlined"
-              />
-            ),
-          },
-          {
-            label: 'Replicas',
-            getter: (topic: any) => (
-              <Chip
-                label={topic.spec?.replicas || 0}
-                size="small"
-                color="secondary"
-                variant="outlined"
-              />
-            ),
-          },
-          {
-            label: 'Topic Name',
-            getter: (topic: any) =>
-              topic.status?.topicName || topic.spec?.topicName || topic.metadata?.name,
-          },
-          {
-            label: 'Status',
-            getter: (topic: any) => {
-              const { status, type } = getTopicStatus(topic);
-              return <StatusLabel status={type}>{status}</StatusLabel>;
+      {isDemoMode && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Showing demo data. Connect to a cluster with Strimzi installed to see real resources.
+        </Alert>
+      )}
+
+      <SectionBox>
+        <SimpleTable
+          columns={[
+            {
+              label: 'Name',
+              getter: (topic: any) => {
+                const data = topic.jsonData || topic;
+                return (
+                  <Link
+                    component={RouterLink}
+                    to={`/strimzi/topics/${data.metadata?.namespace}/${data.metadata?.name}`}
+                    sx={{ fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' }}}
+                  >
+                    {data.metadata?.name}
+                  </Link>
+                );
+              },
             },
-          },
-        ]}
-        data={topics}
-        emptyMessage="No Kafka topics found. Create a KafkaTopic resource to get started."
-      />
-    </SectionBox>
+            {
+              label: 'Namespace',
+              getter: (topic: any) => {
+                const data = topic.jsonData || topic;
+                return <Chip label={data.metadata?.namespace} size="small" variant="outlined" />;
+              },
+            },
+            {
+              label: 'Partitions',
+              getter: (topic: any) => {
+                const data = topic.jsonData || topic;
+                return (
+                  <Chip 
+                    label={data.spec?.partitions || 0} 
+                    size="small" 
+                    color="success" 
+                    sx={{ minWidth: 36, fontWeight: 600 }}
+                  />
+                );
+              },
+            },
+            {
+              label: 'Replicas',
+              getter: (topic: any) => {
+                const data = topic.jsonData || topic;
+                return (
+                  <Chip 
+                    label={data.spec?.replicas || 0} 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined"
+                    sx={{ minWidth: 36 }}
+                  />
+                );
+              },
+            },
+            {
+              label: 'Topic Name',
+              getter: (topic: any) => {
+                const data = topic.jsonData || topic;
+                return (
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                    {data.status?.topicName || data.metadata?.name}
+                  </Typography>
+                );
+              },
+            },
+            {
+              label: 'Status',
+              getter: (topic: any) => {
+                const { status, type } = getTopicStatus(topic);
+                return <StatusLabel status={type}>{status}</StatusLabel>;
+              },
+            },
+          ]}
+          data={displayData}
+          emptyMessage="No Kafka topics found."
+        />
+      </SectionBox>
+    </Box>
   );
 }

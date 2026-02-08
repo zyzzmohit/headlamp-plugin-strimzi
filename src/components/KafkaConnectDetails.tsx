@@ -21,28 +21,24 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
 import { Icon } from '@iconify/react';
 
 import { KafkaConnectClass } from '../crdClasses';
+import { mockKafkaConnects, getDataWithMock } from '../mockData';
 
 export default function KafkaConnectDetails() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
   
-  // Use the hook pattern with a filter
   const [connects, error] = KafkaConnectClass.useList({ namespace });
+  const displayData = getDataWithMock(connects, mockKafkaConnects as any[], error);
   
-  // Find the specific connect by name
-  const connect = connects?.find((c: any) => c.jsonData?.metadata?.name === name);
+  const connect = displayData?.find((c: any) => {
+    const data = c.jsonData || c;
+    return data.metadata?.name === name;
+  });
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Connect Details">
-        <Typography color="error">Error loading Kafka Connect: {(error as any)?.message || 'Unknown error'}</Typography>
-      </SectionBox>
-    );
-  }
-
-  if (connects === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Connect Details">
         <Typography>Loading...</Typography>
@@ -58,8 +54,7 @@ export default function KafkaConnectDetails() {
     );
   }
 
-  // Access data via jsonData
-  const data = connect.jsonData || {};
+  const data = connect.jsonData || connect;
   const spec = data.spec || {};
   const status = data.status || {};
   const metadata = data.metadata || {};
@@ -78,18 +73,37 @@ export default function KafkaConnectDetails() {
   return (
     <Box sx={{ p: 2 }}>
       {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <Icon icon="mdi:connection" width={40} height={40} color="#ff9800" />
-        <Box ml={2}>
-          <Typography variant="h5" fontWeight="bold">
-            {metadata.name}
-          </Typography>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Chip label={metadata.namespace} size="small" variant="outlined" />
-            {getReadyStatus()}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 3, 
+          background: 'linear-gradient(135deg, #ff980015 0%, #ff980005 100%)',
+          border: '1px solid #ff980030'
+        }}
+      >
+        <Box display="flex" alignItems="center">
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#ff980020', mr: 2 }}>
+            <Icon icon="mdi:connection" width={40} height={40} color="#ff9800" />
+          </Box>
+          <Box flex={1}>
+            <Typography variant="h4" fontWeight="bold">
+              {metadata.name}
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+              <Chip label={metadata.namespace} size="small" variant="outlined" />
+              <Chip label={`v${spec.version || 'Unknown'}`} size="small" color="warning" variant="outlined" />
+              <Chip 
+                label={`${status.readyReplicas || 0}/${spec.replicas || 0} replicas`} 
+                size="small" 
+                color="primary" 
+              />
+              {getReadyStatus()}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </Paper>
 
       <Grid container spacing={3}>
         {/* Basic Info */}
@@ -112,7 +126,11 @@ export default function KafkaConnectDetails() {
           <SectionBox title="Connection Configuration">
             <NameValueTable
               rows={[
-                { name: 'Bootstrap Servers', value: spec.bootstrapServers || 'N/A' },
+                { name: 'Bootstrap Servers', value: (
+                  <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {spec.bootstrapServers || 'N/A'}
+                  </Typography>
+                )},
                 { name: 'Image', value: spec.image || 'Default' },
                 { name: 'Build Enabled', value: spec.build ? 'Yes' : 'No' },
               ]}
@@ -122,12 +140,23 @@ export default function KafkaConnectDetails() {
 
         {/* Connector Plugins */}
         <Grid item xs={12}>
-          <SectionBox title="Connector Plugins">
+          <SectionBox title="Available Connector Plugins">
             {status.connectorPlugins && status.connectorPlugins.length > 0 ? (
               <SimpleTable
                 columns={[
-                  { label: 'Class', getter: (p: any) => p.class },
-                  { label: 'Type', getter: (p: any) => p.type },
+                  { label: 'Class', getter: (p: any) => (
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                      {p.class}
+                    </Typography>
+                  )},
+                  { label: 'Type', getter: (p: any) => (
+                    <Chip 
+                      label={p.type} 
+                      size="small" 
+                      color={p.type === 'source' ? 'success' : 'info'}
+                      variant="outlined"
+                    />
+                  )},
                   { label: 'Version', getter: (p: any) => p.version || 'N/A' },
                 ]}
                 data={status.connectorPlugins}

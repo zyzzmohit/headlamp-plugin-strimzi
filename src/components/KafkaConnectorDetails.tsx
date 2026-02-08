@@ -21,28 +21,24 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
 import { Icon } from '@iconify/react';
 
 import { KafkaConnectorClass } from '../crdClasses';
+import { mockKafkaConnectors, getDataWithMock } from '../mockData';
 
 export default function KafkaConnectorDetails() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
   
-  // Use the hook pattern with a filter
   const [connectors, error] = KafkaConnectorClass.useList({ namespace });
+  const displayData = getDataWithMock(connectors, mockKafkaConnectors as any[], error);
   
-  // Find the specific connector by name
-  const connector = connectors?.find((c: any) => c.jsonData?.metadata?.name === name);
+  const connector = displayData?.find((c: any) => {
+    const data = c.jsonData || c;
+    return data.metadata?.name === name;
+  });
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Connector Details">
-        <Typography color="error">Error loading Kafka Connector: {(error as any)?.message || 'Unknown error'}</Typography>
-      </SectionBox>
-    );
-  }
-
-  if (connectors === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Connector Details">
         <Typography>Loading...</Typography>
@@ -58,8 +54,7 @@ export default function KafkaConnectorDetails() {
     );
   }
 
-  // Access data via jsonData
-  const data = connector.jsonData || {};
+  const data = connector.jsonData || connector;
   const spec = data.spec || {};
   const status = data.status || {};
   const metadata = data.metadata || {};
@@ -87,19 +82,33 @@ export default function KafkaConnectorDetails() {
   return (
     <Box sx={{ p: 2 }}>
       {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <Icon icon="mdi:pipe" width={40} height={40} color="#9c27b0" />
-        <Box ml={2}>
-          <Typography variant="h5" fontWeight="bold">
-            {metadata.name}
-          </Typography>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Chip label={metadata.namespace} size="small" variant="outlined" />
-            {getReadyStatus()}
-            {spec.pause && <Chip label="Paused" size="small" color="warning" />}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 3, 
+          background: 'linear-gradient(135deg, #9c27b015 0%, #9c27b005 100%)',
+          border: '1px solid #9c27b030'
+        }}
+      >
+        <Box display="flex" alignItems="center">
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#9c27b020', mr: 2 }}>
+            <Icon icon="mdi:pipe" width={40} height={40} color="#9c27b0" />
+          </Box>
+          <Box flex={1}>
+            <Typography variant="h4" fontWeight="bold">
+              {metadata.name}
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+              <Chip label={metadata.namespace} size="small" variant="outlined" />
+              <Chip label={`${spec.tasksMax || 1} tasks`} size="small" color="secondary" />
+              {spec.pause && <Chip label="Paused" size="small" color="warning" />}
+              {getReadyStatus()}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </Paper>
 
       <Grid container spacing={3}>
         {/* Basic Info */}
@@ -109,7 +118,11 @@ export default function KafkaConnectorDetails() {
               rows={[
                 { name: 'Name', value: metadata.name },
                 { name: 'Namespace', value: metadata.namespace },
-                { name: 'Class', value: spec.class || 'Unknown' },
+                { name: 'Class', value: (
+                  <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {spec.class || 'Unknown'}
+                  </Typography>
+                )},
                 { name: 'Max Tasks', value: spec.tasksMax || 1 },
                 { name: 'Created', value: metadata.creationTimestamp },
               ]}
@@ -122,8 +135,18 @@ export default function KafkaConnectorDetails() {
           <SectionBox title="Connector Status">
             <NameValueTable
               rows={[
-                { name: 'State', value: connectorStatus.state || 'Unknown' },
-                { name: 'Worker ID', value: connectorStatus.worker_id || 'N/A' },
+                { name: 'State', value: (
+                  <Chip 
+                    label={connectorStatus.state || 'Unknown'} 
+                    size="small" 
+                    color={connectorStatus.state === 'RUNNING' ? 'success' : 'warning'}
+                  />
+                )},
+                { name: 'Worker ID', value: (
+                  <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {connectorStatus.worker_id || 'N/A'}
+                  </Typography>
+                )},
                 { name: 'Observed Generation', value: status.observedGeneration || 'N/A' },
               ]}
             />
@@ -136,17 +159,22 @@ export default function KafkaConnectorDetails() {
             {tasks.length > 0 ? (
               <SimpleTable
                 columns={[
-                  { label: 'Task ID', getter: (t: any) => t.id },
+                  { label: 'Task ID', getter: (t: any) => (
+                    <Chip label={t.id} size="small" variant="outlined" />
+                  )},
                   {
                     label: 'State',
                     getter: (t: any) => (
-                      <StatusLabel status={t.state === 'RUNNING' ? 'success' : 'error'}>
+                      <StatusLabel status={t.state === 'RUNNING' ? 'success' : t.state === 'PAUSED' ? 'warning' : 'error'}>
                         {t.state}
                       </StatusLabel>
                     ),
                   },
-                  { label: 'Worker ID', getter: (t: any) => t.worker_id || 'N/A' },
-                  { label: 'Trace', getter: (t: any) => t.trace ? t.trace.substring(0, 50) + '...' : '-' },
+                  { label: 'Worker ID', getter: (t: any) => (
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                      {t.worker_id || 'N/A'}
+                    </Typography>
+                  )},
                 ]}
                 data={tasks}
               />
@@ -164,8 +192,14 @@ export default function KafkaConnectorDetails() {
             {configEntries.length > 0 ? (
               <SimpleTable
                 columns={[
-                  { label: 'Config Key', getter: (c: any) => c.key },
-                  { label: 'Value', getter: (c: any) => c.value },
+                  { label: 'Config Key', getter: (c: any) => (
+                    <Typography fontWeight={500}>{c.key}</Typography>
+                  )},
+                  { label: 'Value', getter: (c: any) => (
+                    <Typography sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 1, fontSize: '0.85rem' }}>
+                      {c.value}
+                    </Typography>
+                  )},
                 ]}
                 data={configEntries}
               />

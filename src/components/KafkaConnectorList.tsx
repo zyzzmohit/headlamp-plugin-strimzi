@@ -20,12 +20,16 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import { Link as RouterLink } from 'react-router-dom';
+import { Icon } from '@iconify/react';
 
 import { KafkaConnectorClass } from '../crdClasses';
+import { mockKafkaConnectors, getDataWithMock } from '../mockData';
 
 function getConnectorStatus(connector: any): { status: string; type: 'success' | 'warning' | 'error' } {
-  const state = connector.jsonData?.status?.connectorStatus?.connector?.state;
+  const data = connector.jsonData || connector;
+  const state = data.status?.connectorStatus?.connector?.state;
   
   if (state === 'RUNNING') {
     return { status: 'Running', type: 'success' };
@@ -35,8 +39,7 @@ function getConnectorStatus(connector: any): { status: string; type: 'success' |
     return { status: state, type: 'error' };
   }
   
-  // Fallback to conditions
-  const conditions = connector.jsonData?.status?.conditions || [];
+  const conditions = data.status?.conditions || [];
   const readyCondition = conditions.find((c: any) => c.type === 'Ready');
   if (readyCondition?.status === 'True') {
     return { status: 'Ready', type: 'success' };
@@ -47,103 +50,135 @@ function getConnectorStatus(connector: any): { status: string; type: 'success' |
 }
 
 function getConnectorClass(connector: any): string {
-  return connector.jsonData?.spec?.class || 'Unknown';
+  const data = connector.jsonData || connector;
+  return data.spec?.class || 'Unknown';
 }
 
-function getTasksMax(connector: any): number {
-  return connector.jsonData?.spec?.tasksMax || 1;
+function getShortClassName(fullClass: string): string {
+  const parts = fullClass.split('.');
+  return parts[parts.length - 1];
 }
 
 export default function KafkaConnectorList() {
-  // Use the hook pattern
   const [connectors, error] = KafkaConnectorClass.useList();
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Connectors">
-        <Typography color="error">Error loading Kafka Connectors: {(error as any)?.message || 'Unknown error'}</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          Make sure Strimzi CRDs are installed in your cluster.
-        </Typography>
-      </SectionBox>
-    );
-  }
+  const displayData = getDataWithMock(connectors, mockKafkaConnectors as any[], error);
+  const isDemoMode = error !== null || (connectors !== null && connectors.length === 0);
 
-  if (connectors === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Connectors">
-        <Typography>Loading Kafka Connectors...</Typography>
+        <Typography>Loading Kafka connectors...</Typography>
       </SectionBox>
     );
   }
 
   return (
-    <SectionBox title="Kafka Connectors">
-      <Box mb={2}>
-        <Typography variant="body2" color="text.secondary">
-          Manage individual connectors for your Kafka Connect clusters.
-        </Typography>
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" mb={3}>
+        <Box sx={{ p: 1, borderRadius: 2, bgcolor: '#9c27b015', mr: 2 }}>
+          <Icon icon="mdi:pipe" width={32} height={32} color="#9c27b0" />
+        </Box>
+        <Box flex={1}>
+          <Typography variant="h5" fontWeight="bold">Kafka Connectors</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage individual connectors for streaming data between systems
+          </Typography>
+        </Box>
+        {isDemoMode && (
+          <Chip label="DEMO MODE" size="small" color="warning" sx={{ fontWeight: 600 }} />
+        )}
       </Box>
 
-      <SimpleTable
-        columns={[
-          {
-            label: 'Name',
-            getter: (connector: any) => (
-              <Link
-                component={RouterLink}
-                to={`/strimzi/connectors/${connector.jsonData?.metadata?.namespace}/${connector.jsonData?.metadata?.name}`}
-              >
-                {connector.jsonData?.metadata?.name}
-              </Link>
-            ),
-          },
-          {
-            label: 'Namespace',
-            getter: (connector: any) => connector.jsonData?.metadata?.namespace,
-          },
-          {
-            label: 'Class',
-            getter: (connector: any) => {
-              const cls = getConnectorClass(connector);
-              // Show only the class name without package
-              const shortClass = cls.split('.').pop() || cls;
-              return (
-                <Chip 
-                  label={shortClass} 
-                  size="small" 
-                  color={cls.includes('Source') ? 'success' : cls.includes('Sink') ? 'info' : 'default'}
-                  variant="outlined" 
-                />
-              );
+      {isDemoMode && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Showing demo data. Connect to a cluster with Strimzi installed to see real resources.
+        </Alert>
+      )}
+
+      <SectionBox>
+        <SimpleTable
+          columns={[
+            {
+              label: 'Name',
+              getter: (connector: any) => {
+                const data = connector.jsonData || connector;
+                return (
+                  <Link
+                    component={RouterLink}
+                    to={`/strimzi/connectors/${data.metadata?.namespace}/${data.metadata?.name}`}
+                    sx={{ fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' }}}
+                  >
+                    {data.metadata?.name}
+                  </Link>
+                );
+              },
             },
-          },
-          {
-            label: 'Tasks',
-            getter: (connector: any) => getTasksMax(connector),
-          },
-          {
-            label: 'Pause',
-            getter: (connector: any) => (
-              <Chip
-                label={connector.jsonData?.spec?.pause ? 'Paused' : 'Active'}
-                size="small"
-                color={connector.jsonData?.spec?.pause ? 'warning' : 'success'}
-                variant="outlined"
-              />
-            ),
-          },
-          {
-            label: 'Status',
-            getter: (connector: any) => {
-              const { status, type } = getConnectorStatus(connector);
-              return <StatusLabel status={type}>{status}</StatusLabel>;
+            {
+              label: 'Namespace',
+              getter: (connector: any) => {
+                const data = connector.jsonData || connector;
+                return <Chip label={data.metadata?.namespace} size="small" variant="outlined" />;
+              },
             },
-          },
-        ]}
-        data={connectors}
-        emptyMessage="No Kafka Connectors found. Create a KafkaConnector to start streaming data."
-      />
-    </SectionBox>
+            {
+              label: 'Class',
+              getter: (connector: any) => {
+                const cls = getConnectorClass(connector);
+                const shortClass = getShortClassName(cls);
+                const isSource = shortClass.toLowerCase().includes('source');
+                const isSink = shortClass.toLowerCase().includes('sink');
+                return (
+                  <Chip 
+                    label={shortClass} 
+                    size="small" 
+                    color={isSource ? 'success' : isSink ? 'info' : 'default'}
+                    variant="outlined" 
+                  />
+                );
+              },
+            },
+            {
+              label: 'Tasks',
+              getter: (connector: any) => {
+                const data = connector.jsonData || connector;
+                return (
+                  <Chip 
+                    label={data.spec?.tasksMax || 1} 
+                    size="small" 
+                    color="secondary" 
+                    sx={{ minWidth: 32 }}
+                  />
+                );
+              },
+            },
+            {
+              label: 'Pause',
+              getter: (connector: any) => {
+                const data = connector.jsonData || connector;
+                return (
+                  <Chip
+                    label={data.spec?.pause ? 'Paused' : 'Active'}
+                    size="small"
+                    color={data.spec?.pause ? 'warning' : 'success'}
+                    variant="outlined"
+                  />
+                );
+              },
+            },
+            {
+              label: 'Status',
+              getter: (connector: any) => {
+                const { status, type } = getConnectorStatus(connector);
+                return <StatusLabel status={type}>{status}</StatusLabel>;
+              },
+            },
+          ]}
+          data={displayData}
+          emptyMessage="No Kafka connectors found."
+        />
+      </SectionBox>
+    </Box>
   );
 }

@@ -21,28 +21,25 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
 import { Icon } from '@iconify/react';
 
 import { KafkaClass } from '../crdClasses';
+import { mockKafkaClusters, getDataWithMock } from '../mockData';
 
 export default function KafkaDetails() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
   
-  // Use the hook pattern with a filter to get specific resource
   const [kafkas, error] = KafkaClass.useList({ namespace });
+  const displayData = getDataWithMock(kafkas, mockKafkaClusters as any[], error);
   
-  // Find the specific kafka by name using jsonData
-  const kafka = kafkas?.find((k: any) => k.jsonData?.metadata?.name === name);
+  // Find the specific kafka by name
+  const kafka = displayData?.find((k: any) => {
+    const data = k.jsonData || k;
+    return data.metadata?.name === name;
+  });
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Cluster Details">
-        <Typography color="error">Error loading Kafka cluster: {(error as any)?.message || 'Unknown error'}</Typography>
-      </SectionBox>
-    );
-  }
-
-  if (kafkas === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Cluster Details">
         <Typography>Loading...</Typography>
@@ -58,8 +55,7 @@ export default function KafkaDetails() {
     );
   }
 
-  // Access data via jsonData
-  const data = kafka.jsonData || {};
+  const data = kafka.jsonData || kafka;
   const spec = data.spec || {};
   const status = data.status || {};
   const metadata = data.metadata || {};
@@ -78,18 +74,43 @@ export default function KafkaDetails() {
   return (
     <Box sx={{ p: 2 }}>
       {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <Icon icon="mdi:server-network" width={40} height={40} color="#1a73e8" />
-        <Box ml={2}>
-          <Typography variant="h5" fontWeight="bold">
-            {metadata.name}
-          </Typography>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Chip label={metadata.namespace} size="small" variant="outlined" />
-            {getReadyStatus()}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 3, 
+          background: 'linear-gradient(135deg, #1a73e815 0%, #1a73e805 100%)',
+          border: '1px solid #1a73e830'
+        }}
+      >
+        <Box display="flex" alignItems="center">
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#1a73e820', mr: 2 }}>
+            <Icon icon="mdi:server-network" width={40} height={40} color="#1a73e8" />
+          </Box>
+          <Box flex={1}>
+            <Typography variant="h4" fontWeight="bold">
+              {metadata.name}
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+              <Chip label={metadata.namespace} size="small" variant="outlined" />
+              <Chip 
+                label={`v${status.kafkaVersion || spec.kafka?.version || 'Unknown'}`} 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+              {getReadyStatus()}
+            </Box>
+          </Box>
+          <Box textAlign="right">
+            <Typography variant="body2" color="text.secondary">Cluster ID</Typography>
+            <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
+              {status.clusterId || 'N/A'}
+            </Typography>
           </Box>
         </Box>
-      </Box>
+      </Paper>
 
       <Grid container spacing={3}>
         {/* Basic Info */}
@@ -112,7 +133,9 @@ export default function KafkaDetails() {
           <SectionBox title="Kafka Configuration">
             <NameValueTable
               rows={[
-                { name: 'Broker Replicas', value: spec.kafka?.replicas || 0 },
+                { name: 'Broker Replicas', value: (
+                  <Chip label={spec.kafka?.replicas || 0} size="small" color="primary" />
+                )},
                 { name: 'Storage Type', value: spec.kafka?.storage?.type || 'Unknown' },
                 { name: 'Storage Size', value: spec.kafka?.storage?.size || 'N/A' },
                 { name: 'ZooKeeper Replicas', value: spec.zookeeper?.replicas || 'N/A (KRaft mode)' },
@@ -127,10 +150,28 @@ export default function KafkaDetails() {
             {spec.kafka?.listeners && spec.kafka.listeners.length > 0 ? (
               <SimpleTable
                 columns={[
-                  { label: 'Name', getter: (l: any) => l.name },
-                  { label: 'Port', getter: (l: any) => l.port },
-                  { label: 'Type', getter: (l: any) => l.type },
-                  { label: 'TLS', getter: (l: any) => (l.tls ? 'Enabled' : 'Disabled') },
+                  { label: 'Name', getter: (l: any) => (
+                    <Typography fontWeight={600}>{l.name}</Typography>
+                  )},
+                  { label: 'Port', getter: (l: any) => (
+                    <Chip label={l.port} size="small" variant="outlined" />
+                  )},
+                  { label: 'Type', getter: (l: any) => (
+                    <Chip 
+                      label={l.type} 
+                      size="small" 
+                      color={l.type === 'internal' ? 'default' : 'primary'}
+                      variant="outlined"
+                    />
+                  )},
+                  { label: 'TLS', getter: (l: any) => (
+                    <Chip 
+                      label={l.tls ? 'Enabled' : 'Disabled'} 
+                      size="small" 
+                      color={l.tls ? 'success' : 'default'}
+                      variant="outlined"
+                    />
+                  )},
                 ]}
                 data={spec.kafka.listeners}
               />
@@ -148,8 +189,14 @@ export default function KafkaDetails() {
             {status.listeners && status.listeners.length > 0 ? (
               <SimpleTable
                 columns={[
-                  { label: 'Listener', getter: (l: any) => l.name },
-                  { label: 'Bootstrap Server', getter: (l: any) => l.bootstrapServers || 'N/A' },
+                  { label: 'Listener', getter: (l: any) => (
+                    <Typography fontWeight={500}>{l.name}</Typography>
+                  )},
+                  { label: 'Bootstrap Server', getter: (l: any) => (
+                    <Typography sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 1 }}>
+                      {l.bootstrapServers || 'N/A'}
+                    </Typography>
+                  )},
                 ]}
                 data={status.listeners}
               />

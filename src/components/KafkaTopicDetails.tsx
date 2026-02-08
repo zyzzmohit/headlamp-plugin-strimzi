@@ -21,28 +21,24 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
 import { Icon } from '@iconify/react';
 
 import { KafkaTopicClass } from '../crdClasses';
+import { mockKafkaTopics, getDataWithMock } from '../mockData';
 
 export default function KafkaTopicDetails() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
   
-  // Use the hook pattern with a filter
   const [topics, error] = KafkaTopicClass.useList({ namespace });
+  const displayData = getDataWithMock(topics, mockKafkaTopics as any[], error);
   
-  // Find the specific topic by name using jsonData
-  const topic = topics?.find((t: any) => t.jsonData?.metadata?.name === name);
+  const topic = displayData?.find((t: any) => {
+    const data = t.jsonData || t;
+    return data.metadata?.name === name;
+  });
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Topic Details">
-        <Typography color="error">Error loading Kafka topic: {(error as any)?.message || 'Unknown error'}</Typography>
-      </SectionBox>
-    );
-  }
-
-  if (topics === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Topic Details">
         <Typography>Loading...</Typography>
@@ -53,13 +49,12 @@ export default function KafkaTopicDetails() {
   if (!topic) {
     return (
       <SectionBox title="Kafka Topic Details">
-        <Typography color="error">Kafka topic '{name}' not found in namespace '{namespace}'</Typography>
+        <Typography color="error">Kafka Topic '{name}' not found in namespace '{namespace}'</Typography>
       </SectionBox>
     );
   }
 
-  // Access data via jsonData
-  const data = topic.jsonData || {};
+  const data = topic.jsonData || topic;
   const spec = data.spec || {};
   const status = data.status || {};
   const metadata = data.metadata || {};
@@ -84,61 +79,86 @@ export default function KafkaTopicDetails() {
   return (
     <Box sx={{ p: 2 }}>
       {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <Icon icon="mdi:message-text" width={40} height={40} color="#34a853" />
-        <Box ml={2}>
-          <Typography variant="h5" fontWeight="bold">
-            {metadata.name}
-          </Typography>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Chip label={metadata.namespace} size="small" variant="outlined" />
-            {getReadyStatus()}
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 3, 
+          background: 'linear-gradient(135deg, #34a85315 0%, #34a85305 100%)',
+          border: '1px solid #34a85330'
+        }}
+      >
+        <Box display="flex" alignItems="center">
+          <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#34a85320', mr: 2 }}>
+            <Icon icon="mdi:message-text" width={40} height={40} color="#34a853" />
+          </Box>
+          <Box flex={1}>
+            <Typography variant="h4" fontWeight="bold">
+              {metadata.name}
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1} mt={0.5}>
+              <Chip label={metadata.namespace} size="small" variant="outlined" />
+              <Chip label={`${spec.partitions || 0} partitions`} size="small" color="success" />
+              <Chip label={`${spec.replicas || 0} replicas`} size="small" color="primary" variant="outlined" />
+              {getReadyStatus()}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </Paper>
 
       <Grid container spacing={3}>
-        {/* Basic Info */}
+        {/* Topic Info */}
         <Grid item xs={12} md={6}>
           <SectionBox title="Topic Information">
             <NameValueTable
               rows={[
-                { name: 'Resource Name', value: metadata.name },
+                { name: 'Name', value: metadata.name },
                 { name: 'Namespace', value: metadata.namespace },
-                { name: 'Topic Name', value: status.topicName || spec.topicName || metadata.name },
+                { name: 'Topic Name', value: status.topicName || metadata.name },
                 { name: 'Created', value: metadata.creationTimestamp },
               ]}
             />
           </SectionBox>
         </Grid>
 
-        {/* Partition & Replication */}
+        {/* Partitioning */}
         <Grid item xs={12} md={6}>
-          <SectionBox title="Partitioning">
+          <SectionBox title="Partitioning & Replication">
             <NameValueTable
               rows={[
-                { name: 'Partitions', value: spec.partitions || 0 },
-                { name: 'Replication Factor', value: spec.replicas || 0 },
+                { name: 'Partitions', value: (
+                  <Chip label={spec.partitions || 0} size="small" color="success" />
+                )},
+                { name: 'Replication Factor', value: (
+                  <Chip label={spec.replicas || 0} size="small" color="primary" variant="outlined" />
+                )},
                 { name: 'Observed Generation', value: status.observedGeneration || 'N/A' },
               ]}
             />
           </SectionBox>
         </Grid>
 
-        {/* Topic Configuration */}
+        {/* Configuration */}
         <Grid item xs={12}>
           <SectionBox title="Topic Configuration">
             {configEntries.length > 0 ? (
               <SimpleTable
                 columns={[
-                  { label: 'Config Key', getter: (c: any) => c.key },
-                  { label: 'Value', getter: (c: any) => c.value },
+                  { label: 'Config Key', getter: (c: any) => (
+                    <Typography fontWeight={500}>{c.key}</Typography>
+                  )},
+                  { label: 'Value', getter: (c: any) => (
+                    <Typography sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 1 }}>
+                      {c.value}
+                    </Typography>
+                  )},
                 ]}
                 data={configEntries}
               />
             ) : (
               <Typography variant="body2" color="text.secondary">
-                No custom configuration set. Using Kafka defaults.
+                Using default configuration
               </Typography>
             )}
           </SectionBox>

@@ -20,12 +20,16 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
+import Alert from '@mui/material/Alert';
 import { Link as RouterLink } from 'react-router-dom';
+import { Icon } from '@iconify/react';
 
 import { KafkaConnectClass } from '../crdClasses';
+import { mockKafkaConnects, getDataWithMock } from '../mockData';
 
 function getConnectStatus(connect: any): { status: string; type: 'success' | 'warning' | 'error' } {
-  const conditions = connect.jsonData?.status?.conditions || [];
+  const data = connect.jsonData || connect;
+  const conditions = data.status?.conditions || [];
   const readyCondition = conditions.find((c: any) => c.type === 'Ready');
   
   if (readyCondition?.status === 'True') {
@@ -37,33 +41,24 @@ function getConnectStatus(connect: any): { status: string; type: 'success' | 'wa
 }
 
 function getReplicas(connect: any): string {
-  const spec = connect.jsonData?.spec || {};
-  const status = connect.jsonData?.status || {};
-  const desired = spec.replicas || 0;
-  const ready = status.readyReplicas || 0;
+  const data = connect.jsonData || connect;
+  const desired = data.spec?.replicas || 0;
+  const ready = data.status?.readyReplicas || 0;
   return `${ready}/${desired}`;
 }
 
 function getBootstrapServers(connect: any): string {
-  return connect.jsonData?.spec?.bootstrapServers || 'N/A';
+  const data = connect.jsonData || connect;
+  return data.spec?.bootstrapServers || 'N/A';
 }
 
 export default function KafkaConnectList() {
-  // Use the hook pattern
   const [connects, error] = KafkaConnectClass.useList();
 
-  if (error) {
-    return (
-      <SectionBox title="Kafka Connect Clusters">
-        <Typography color="error">Error loading Kafka Connect clusters: {(error as any)?.message || 'Unknown error'}</Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          Make sure Strimzi CRDs are installed in your cluster.
-        </Typography>
-      </SectionBox>
-    );
-  }
+  const displayData = getDataWithMock(connects, mockKafkaConnects as any[], error);
+  const isDemoMode = error !== null || (connects !== null && connects.length === 0);
 
-  if (connects === null) {
+  if (displayData === null) {
     return (
       <SectionBox title="Kafka Connect Clusters">
         <Typography>Loading Kafka Connect clusters...</Typography>
@@ -72,55 +67,92 @@ export default function KafkaConnectList() {
   }
 
   return (
-    <SectionBox title="Kafka Connect Clusters">
-      <Box mb={2}>
-        <Typography variant="body2" color="text.secondary">
-          Manage your Kafka Connect clusters for streaming data integration.
-        </Typography>
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" mb={3}>
+        <Box sx={{ p: 1, borderRadius: 2, bgcolor: '#ff980015', mr: 2 }}>
+          <Icon icon="mdi:connection" width={32} height={32} color="#ff9800" />
+        </Box>
+        <Box flex={1}>
+          <Typography variant="h5" fontWeight="bold">Kafka Connect</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage Connect clusters for streaming data integration
+          </Typography>
+        </Box>
+        {isDemoMode && (
+          <Chip label="DEMO MODE" size="small" color="warning" sx={{ fontWeight: 600 }} />
+        )}
       </Box>
 
-      <SimpleTable
-        columns={[
-          {
-            label: 'Name',
-            getter: (connect: any) => (
-              <Link
-                component={RouterLink}
-                to={`/strimzi/connects/${connect.jsonData?.metadata?.namespace}/${connect.jsonData?.metadata?.name}`}
-              >
-                {connect.jsonData?.metadata?.name}
-              </Link>
-            ),
-          },
-          {
-            label: 'Namespace',
-            getter: (connect: any) => connect.jsonData?.metadata?.namespace,
-          },
-          {
-            label: 'Replicas',
-            getter: (connect: any) => (
-              <Chip label={getReplicas(connect)} size="small" color="primary" variant="outlined" />
-            ),
-          },
-          {
-            label: 'Bootstrap Servers',
-            getter: (connect: any) => getBootstrapServers(connect),
-          },
-          {
-            label: 'Version',
-            getter: (connect: any) => connect.jsonData?.spec?.version || 'Unknown',
-          },
-          {
-            label: 'Status',
-            getter: (connect: any) => {
-              const { status, type } = getConnectStatus(connect);
-              return <StatusLabel status={type}>{status}</StatusLabel>;
+      {isDemoMode && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Showing demo data. Connect to a cluster with Strimzi installed to see real resources.
+        </Alert>
+      )}
+
+      <SectionBox>
+        <SimpleTable
+          columns={[
+            {
+              label: 'Name',
+              getter: (connect: any) => {
+                const data = connect.jsonData || connect;
+                return (
+                  <Link
+                    component={RouterLink}
+                    to={`/strimzi/connects/${data.metadata?.namespace}/${data.metadata?.name}`}
+                    sx={{ fontWeight: 600, textDecoration: 'none', '&:hover': { textDecoration: 'underline' }}}
+                  >
+                    {data.metadata?.name}
+                  </Link>
+                );
+              },
             },
-          },
-        ]}
-        data={connects}
-        emptyMessage="No Kafka Connect clusters found. Deploy a KafkaConnect to get started."
-      />
-    </SectionBox>
+            {
+              label: 'Namespace',
+              getter: (connect: any) => {
+                const data = connect.jsonData || connect;
+                return <Chip label={data.metadata?.namespace} size="small" variant="outlined" />;
+              },
+            },
+            {
+              label: 'Replicas',
+              getter: (connect: any) => (
+                <Chip 
+                  label={getReplicas(connect)} 
+                  size="small" 
+                  color="warning" 
+                  sx={{ fontWeight: 600 }}
+                />
+              ),
+            },
+            {
+              label: 'Bootstrap Servers',
+              getter: (connect: any) => (
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                  {getBootstrapServers(connect)}
+                </Typography>
+              ),
+            },
+            {
+              label: 'Version',
+              getter: (connect: any) => {
+                const data = connect.jsonData || connect;
+                return data.spec?.version || 'Unknown';
+              },
+            },
+            {
+              label: 'Status',
+              getter: (connect: any) => {
+                const { status, type } = getConnectStatus(connect);
+                return <StatusLabel status={type}>{status}</StatusLabel>;
+              },
+            },
+          ]}
+          data={displayData}
+          emptyMessage="No Kafka Connect clusters found."
+        />
+      </SectionBox>
+    </Box>
   );
 }
